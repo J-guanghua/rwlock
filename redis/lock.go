@@ -14,6 +14,12 @@ type redisLock struct {
 	mutex map[string]*rMutex
 }
 
+func NewRedisLock(pools ...*redis.Client) *redisLock {
+	return &redisLock{
+		pool: pools,
+	}
+}
+
 func (rlock *redisLock) allocation(name string, opts *mutex.Options) mutex.Mutex {
 	rlock.mtx.Lock()
 	defer rlock.mtx.Unlock()

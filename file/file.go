@@ -52,7 +52,7 @@ func (flock *FileLock) loadMutex(name string, file2 *fMutex) mutex.Mutex {
 
 var flock FileLock
 
-func NewMutex(ctx context.Context, name string) mutex.Mutex {
+func NewMutex(ctx context.Context, name string, options ...mutex.Option) mutex.Mutex {
 	return flock.allocation(name)
 }
 
