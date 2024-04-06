@@ -10,16 +10,16 @@ import (
 	"time"
 )
 
-type fileLock struct {
+type FileLock struct {
 	size      int
-	m         sync.Mutex
+	mtx       sync.Mutex
 	directory string
 	mutex     map[string]*fMutex
 }
 
-func (flock *fileLock) allocation(name string) mutex.Mutex {
-	flock.m.Lock()
-	defer flock.m.Unlock()
+func (flock *FileLock) allocation(name string) mutex.Mutex {
+	flock.mtx.Lock()
+	defer flock.mtx.Unlock()
 	if flock.mutex == nil {
 		flock.mutex = map[string]*fMutex{}
 	} else if mutex := flock.mutex[name]; mutex != nil {
@@ -30,7 +30,7 @@ func (flock *fileLock) allocation(name string) mutex.Mutex {
 	})
 }
 
-func (flock *fileLock) loadMutex(name string, file2 *fMutex) mutex.Mutex {
+func (flock *FileLock) loadMutex(name string, file2 *fMutex) mutex.Mutex {
 	if flock.directory == "" {
 		flock.directory = "./tmp"
 	}
@@ -50,13 +50,13 @@ func (flock *fileLock) loadMutex(name string, file2 *fMutex) mutex.Mutex {
 	return file2
 }
 
-var flock fileLock
+var flock FileLock
 
 func NewMutex(ctx context.Context, name string) mutex.Mutex {
 	return flock.allocation(name)
 }
 
-func (flock *fileLock) NewMutex(ctx context.Context, name string) mutex.Mutex {
+func (flock *FileLock) NewMutex(ctx context.Context, name string) mutex.Mutex {
 	return flock.allocation(name)
 }
 
@@ -94,13 +94,13 @@ func (file *fMutex) Unlock(ctx context.Context) error {
 // 获取文件句柄
 func (file *fMutex) acquireLock(ctx context.Context) error {
 	file.m.Lock()
-	//defer fMutex.m.Unlock()
+	//defer fMutex.mtx.Unlock()
 	return acquireLock(file.file)
 }
 
 // 释放文件锁
 func (file *fMutex) releaseLock(ctx context.Context) error {
-	//fMutex.m.Lock()
+	//fMutex.mtx.Lock()
 	defer file.m.Unlock()
 	return releaseLock(file.file)
 }

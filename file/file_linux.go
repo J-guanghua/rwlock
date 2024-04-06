@@ -1,13 +1,4 @@
-package
-
-import (
-	"fmt"
-	"github.com/J-guanghua/mutex"
-	"os"
-	"syscall"
-)
 package file
-
 
 import (
 	"fmt"

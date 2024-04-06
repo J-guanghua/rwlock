@@ -87,9 +87,9 @@ func Test_fileLock_NewMutex(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			flock := &fileLock{
+			flock := &FileLock{
 				size:      tt.fields.size,
-				m:         tt.fields.m,
+				mtx:       tt.fields.m,
 				directory: tt.fields.directory,
 				mutex:     tt.fields.mutex,
 			}
