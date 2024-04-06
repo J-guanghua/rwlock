@@ -33,6 +33,7 @@ func (rlock *redisLock) allocation(name string, opts *mutex.Options) mutex.Mutex
 			opts:   opts,
 			client: rlock.pool[index],
 			signal: make(chan struct{}, 1),
+			//starving: make(chan struct{}, 3),
 		}
 	}
 	return rlock.mutex[name]

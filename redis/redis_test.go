@@ -38,16 +38,6 @@ func init() {
 					IdleTimeout:  10 * time.Minute, // 连接的最大空闲时间
 				},
 			),
-			redis.NewClient(
-				&redis.Options{
-					Addr:         "192.168.43.152:63790",
-					PoolSize:     100,              // 连接池大小
-					MinIdleConns: 10,               // 最小空闲连接数
-					MaxConnAge:   time.Hour,        // 连接的最大生命周期
-					PoolTimeout:  30 * time.Second, // 获取连接的超时时间
-					IdleTimeout:  10 * time.Minute, // 连接的最大空闲时间
-				},
-			),
 		},
 	}
 }
@@ -109,6 +99,7 @@ func (a *Account) alteration(ctx context.Context, value float64) error {
 	if err := a.Lock(ctx); err != nil {
 		return err
 	}
+	//time.Sleep(2 * time.Second)
 	defer a.Unlock(ctx)
 	a.money -= value
 	a.withhold += value
@@ -180,11 +171,17 @@ func WaitGroupPlaceAnOrder(ctx context.Context, order *Order, account *Account, 
 func TestWaitGroupAccount(t *testing.T) {
 	var wg sync.WaitGroup
 	account := &Account{
-		money: 100002,
-		Mutex: rlock.NewMutex(context.TODO(), "guanghua"),
+		money: 802,
+		Mutex: rlock.NewMutex(context.TODO(), "guanghua",
+			mutex.WithExpiry(3*time.Second),
+			//mutex.WithTouchf(func(ctx context.Context, name string) time.Duration {
+			//	log.Printf("续期:%v;", name)
+			//	return 15 * time.Second
+			//}),
+		),
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 800; i++ {
 		wg.Add(1)
 		go func(acc *Account) {
 			defer wg.Done()
@@ -195,7 +192,7 @@ func TestWaitGroupAccount(t *testing.T) {
 		}(account)
 	}
 	wg.Wait()
-	log.Printf("账户余额:%v,并发 100000,剩余 %v,", 100002, account.money)
+	log.Printf("账户余额:%v,并发 8000,剩余 %v,", 802, account.money)
 }
 
 func BenchmarkAccount(b *testing.B) {

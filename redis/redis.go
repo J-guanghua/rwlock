@@ -5,7 +5,9 @@ import (
 	"errors"
 	"github.com/J-guanghua/mutex"
 	"github.com/go-redis/redis/v8"
+	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -41,16 +43,16 @@ var (
 type rMutex struct {
 	name   string
 	mtx    sync.Mutex
-	num    int32
+	sema   uint32
 	client *redis.Client
 	signal chan struct{}
+	//starving chan struct{}
 	opts   *mutex.Options
-	sema   uint32 //表示信号量，协程阻塞等待该信号量，解锁的协程释放信号量从而唤醒等待信号量的协程。
+	cancel context.CancelFunc
 }
 
 func (r *rMutex) Lock(ctx context.Context) (err error) {
-	err = r.acquirLock(ctx)
-	if err == nil {
+	if err = r.acquirLock(ctx); err == nil {
 		return nil
 	} else if !errors.Is(err, mutex.ErrFail) {
 		return err
@@ -71,8 +73,12 @@ LoopLock:
 }
 
 func (r *rMutex) Unlock(ctx context.Context) error {
+	if r.cancel != nil {
+		r.cancel()
+	}
 	_, err := releaseScript.Run(ctx, r.client, []string{r.name}, r.opts.Value).Result()
 	//log.Printf("Unlock: %v, err :%v(%v) ", r.name, err, i)
+	atomic.StoreUint32(&r.sema, 0)
 	r.notify(mutex.GetGoroutineID())
 	return err
 }
@@ -85,30 +91,37 @@ func (r *rMutex) acquirLock(ctx context.Context) error {
 		return err
 	}
 	if result == int64(1) {
+		atomic.StoreUint32(&r.sema, 1)
 		if r.opts.Touchf != nil {
+			ctx, r.cancel = context.WithCancel(ctx)
 			go r.touchRenewal(ctx, r.name)
 		}
 		return nil
+	} else if r.sema == 0 {
+		r.notify(mutex.GetGoroutineID())
 	}
 	return mutex.ErrFail
 }
 
 // 过期前询问是否续签时间
 func (r *rMutex) touchRenewal(ctx context.Context, name string) (bool, error) {
-	ctx2, _ := context.WithTimeout(ctx, r.opts.Expiry-500*time.Millisecond)
 	select {
-	case <-ctx2.Done():
+	case <-ctx.Done():
+		log.Printf("解除续期:%v;", r.name)
+		return false, nil
+	case <-time.After(r.opts.Expiry - 500*time.Millisecond):
 		if duration := r.opts.Touchf(ctx, name); duration > 0 {
 			expiry := int(duration / time.Millisecond)
-			result, err := touchScript.Run(ctx, r.client, []string{name}, r.opts.Value, expiry).Result()
+			result, err := touchScript.Run(ctx,
+				r.client, []string{name}, r.opts.Value, expiry).Result()
 			//log.Printf("续签:%v , result:%v;err %v", expiry, result, err)
 			if err != nil {
 				return false, err
 			}
 			return result != int64(0), nil
 		}
-		return true, nil
 	}
+	return false, nil
 }
 
 func (r *rMutex) notify(gid int64) {
