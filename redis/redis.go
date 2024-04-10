@@ -3,7 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
-	"github.com/J-guanghua/mutex"
+	"github.com/J-guanghua/rwlock"
 	"github.com/go-redis/redis/v8"
 	"log"
 	"sync"
@@ -40,30 +40,33 @@ var (
 	`)
 )
 
-type rMutex struct {
+type rwRedis struct {
 	name   string
-	mtx    sync.Mutex
 	sema   uint32
+	wait   int32
+	mtx    sync.Mutex
 	client *redis.Client
 	signal chan struct{}
 	//starving chan struct{}
-	opts   *mutex.Options
+	opts   *rwlock.Options
 	cancel context.CancelFunc
 }
 
-func (r *rMutex) Lock(ctx context.Context) (err error) {
-	if err = r.acquirLock(ctx); err == nil {
+func (r *rwRedis) Lock(ctx context.Context) (err error) {
+	if r.sema == 1 || r.wait > 0 {
+	} else if err = r.acquirLock(ctx); err == nil {
 		return nil
-	} else if !errors.Is(err, mutex.ErrFail) {
+	} else if !errors.Is(err, rwlock.ErrFail) {
 		return err
 	}
+	atomic.AddInt32(&r.wait, 1)
 LoopLock:
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-r.signal:
 		err = r.acquirLock(ctx)
-		if errors.Is(err, mutex.ErrFail) {
+		if errors.Is(err, rwlock.ErrFail) {
 			goto LoopLock
 		} else if err != nil {
 			return err
@@ -72,60 +75,61 @@ LoopLock:
 	return nil
 }
 
-func (r *rMutex) Unlock(ctx context.Context) error {
+func (r *rwRedis) Unlock(ctx context.Context) error {
 	if r.cancel != nil {
 		r.cancel()
 	}
-	_, err := releaseScript.Run(ctx, r.client, []string{r.name}, r.opts.Value).Result()
+	atomic.AddInt32(&r.wait, -1)
+	_, err := releaseScript.Eval(ctx, r.client, []string{r.name}, r.opts.Value).Result()
 	//log.Printf("Unlock: %v, err :%v(%v) ", r.name, err, i)
 	atomic.StoreUint32(&r.sema, 0)
-	r.notify(mutex.GetGoroutineID())
+	r.notify(rwlock.GetGoroutineID())
 	return err
 }
 
-func (r *rMutex) acquirLock(ctx context.Context) error {
+func (r *rwRedis) acquirLock(ctx context.Context) error {
 	name := []string{r.name}
 	expiry := int(r.opts.Expiry / time.Millisecond)
-	result, err := acquireScript.Run(ctx, r.client, name, r.opts.Value, expiry).Result()
+	result, err := acquireScript.Eval(ctx, r.client, name, r.opts.Value, expiry).Result()
 	if err != nil {
 		return err
 	}
 	if result == int64(1) {
 		atomic.StoreUint32(&r.sema, 1)
 		if r.opts.Touchf != nil {
-			ctx, r.cancel = context.WithCancel(ctx)
 			go r.touchRenewal(ctx, r.name)
 		}
 		return nil
 	} else if r.sema == 0 {
-		r.notify(mutex.GetGoroutineID())
+		r.notify(rwlock.GetGoroutineID())
 	}
-	return mutex.ErrFail
+	//log.Printf("重试: %v , %v", r.name, err)
+	return rwlock.ErrFail
 }
 
 // 过期前询问是否续签时间
-func (r *rMutex) touchRenewal(ctx context.Context, name string) (bool, error) {
-	select {
-	case <-ctx.Done():
-		log.Printf("解除续期:%v;", r.name)
-		return false, nil
-	case <-time.After(r.opts.Expiry - 500*time.Millisecond):
-		if duration := r.opts.Touchf(ctx, name); duration > 0 {
-			expiry := int(duration / time.Millisecond)
-			result, err := touchScript.Run(ctx,
+func (r *rwRedis) touchRenewal(ctx context.Context, name string) {
+	expiryDuration := r.opts.Expiry
+	ctx, r.cancel = context.WithCancel(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(expiryDuration - 500*time.Millisecond):
+			expiry := int(expiryDuration / time.Millisecond)
+			_, _ = touchScript.Run(ctx,
 				r.client, []string{name}, r.opts.Value, expiry).Result()
-			//log.Printf("续签:%v , result:%v;err %v", expiry, result, err)
-			if err != nil {
-				return false, err
+			if expiryDuration = r.opts.Touchf(ctx, r.cancel); expiryDuration > 0 {
+				log.Printf("续期:  %v", r.name)
+				expiry := int(expiryDuration / time.Millisecond)
+				_, _ = touchScript.Run(ctx,
+					r.client, []string{name}, r.opts.Value, expiry).Result()
 			}
-			return result != int64(0), nil
 		}
 	}
-	return false, nil
 }
 
-func (r *rMutex) notify(gid int64) {
-	//log.Printf("notify:  Gid:%v,signal-%v", gid, len(r.signal))
+func (r *rwRedis) notify(gid int64) {
 	for i := 0; i <= len(r.signal); i++ {
 		select {
 		case r.signal <- struct{}{}:
