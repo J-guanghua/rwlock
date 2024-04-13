@@ -33,9 +33,9 @@ To compile it from source:
     }
     defer mutex.Unlock(ctx)
 	
-    // init redis lock
-	// 支持高可用，压测 100万并发 左右
-	redis.Init(&redis.Options{
+    // init redis lock 
+    // 支持高可用,多实例，压测 100万并发 左右 
+    redis.Init(&redis.Options{
         Addr:         "127.0.0.1:6379",
         PoolSize:     20,               // 连接池大小
         MinIdleConns: 10,               // 最小空闲连接数
@@ -51,13 +51,13 @@ To compile it from source:
     defer mutex.Unlock(ctx)
 	
     // init db lock
-	// 支持高可用，并发压测 5000 左右
+	// 支持高可用,多实例，单实例并发压测 100000 左右
     db, err := sql.Open("mysql", "root:guanghua@tcp(192.168.43.152:3306)/sys?parseTime=true")
     if err != nil {
         panic(err)
     }
     database.Init(db)
-	mutex := database.Mutex("test-1")
+    mutex := database.Mutex("test-1")
     if err := mutex.Lock(ctx); err != nil {
         panic(err)
     }
@@ -68,6 +68,9 @@ To compile it from source:
 ab -n 200000 -c 1000 http://localhost:8000/redis
 ![Image text](img.png)
 
+// mysql单实例 ab 8万并发请求压测
+ab -n 80000 -c 1000 http://localhost:8000/db
+![Image text](img_1.png)
 ### Leader Election
 ```go
 
