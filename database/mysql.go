@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/J-guanghua/rwlock"
+	"log"
 	"sync"
 	"sync/atomic"
 )
@@ -23,6 +24,8 @@ type rwMysql struct {
 func (db *rwMysql) Lock(ctx context.Context) error {
 	var err error
 	if db.sema == 1 || db.wait > 0 {
+		log.Println("wait...",db.sema,db.wait)
+		db.notify(rwlock.GetGoroutineID())
 	} else if err = db.acquireLock(ctx); err == nil {
 		return nil
 	} else if !errors.Is(err, rwlock.ErrFail) {
@@ -31,13 +34,12 @@ func (db *rwMysql) Lock(ctx context.Context) error {
 	atomic.AddInt32(&db.wait, 1)
 LoopLock:
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
 	case <-db.signal:
 		err = db.acquireLock(ctx)
 		if errors.Is(err, rwlock.ErrFail) {
 			goto LoopLock
 		} else if err != nil {
+			log.Println("acquireLock",err)
 			return err
 		}
 	}
@@ -48,6 +50,7 @@ func (db *rwMysql) Unlock(ctx context.Context) error {
 	defer db.notify(rwlock.GetGoroutineID())
 	defer atomic.StoreUint32(&db.sema, 0)
 	atomic.AddInt32(&db.wait, -1)
+	log.Println("Unlock...",db.sema,db.wait)
 	if err := db.releaseUnlock(ctx); err != nil {
 		return err
 	}
