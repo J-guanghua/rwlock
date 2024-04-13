@@ -50,9 +50,9 @@ func (flock *rwLock) allocation(name string) rwlock.Mutex {
 
 var flock rwLock
 
-func NewLock(name string, opts ...rwlock.Option) rwlock.Mutex {
+func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 	return flock.allocation(name)
 }
-func NewRWLock(name string, opts ...rwlock.Option) rwlock.RWMutex {
+func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex {
 	return nil
 }

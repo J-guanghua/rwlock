@@ -27,7 +27,7 @@ func Test_RWLock_WaitGroup(t *testing.T) {
 				wg2.Add(1)
 				go func(name string) {
 					defer wg2.Done()
-					mutex := NewLock(name)
+					mutex := Mutex(name)
 					if err := mutex.Lock(ctx); err != nil {
 						panic(err)
 					}
@@ -63,7 +63,7 @@ func (a *Account) alteration(ctx context.Context, value float64) error {
 
 func TestWaitGroupAccount(t *testing.T) {
 	var wg sync.WaitGroup
-	account := &Account{balance: 100002, m: NewLock("guanghua")}
+	account := &Account{balance: 100002, m: Mutex("guanghua")}
 	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
 	for i := 0; i < 100000; i++ {
 		wg.Add(1)
