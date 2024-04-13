@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/J-guanghua/rwlock"
 	"github.com/go-redis/redis/v8"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +37,15 @@ var (
 			return 0
 		end
 	`)
+	touchWithSetNXScript = redis.NewScript(`
+		if redis.call("GET", KEYS[1]) == ARGV[1] then
+			return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+		elseif redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2], "NX") then
+			return 1
+		else
+			return 0
+		end
+`)
 )
 
 type rwRedis struct {
@@ -54,6 +62,7 @@ type rwRedis struct {
 
 func (r *rwRedis) Lock(ctx context.Context) (err error) {
 	if r.sema == 1 || r.wait > 0 {
+		r.notify(rwlock.GetGoroutineID())
 	} else if err = r.acquirLock(ctx); err == nil {
 		return nil
 	} else if !errors.Is(err, rwlock.ErrFail) {
@@ -76,29 +85,24 @@ LoopLock:
 }
 
 func (r *rwRedis) Unlock(ctx context.Context) error {
-	if r.cancel != nil {
-		r.cancel()
-	}
+	r.cancel()
 	atomic.AddInt32(&r.wait, -1)
 	_, err := releaseScript.Eval(ctx, r.client, []string{r.name}, r.opts.Value).Result()
-	//log.Printf("Unlock: %v, err :%v(%v) ", r.name, err, i)
 	atomic.StoreUint32(&r.sema, 0)
 	r.notify(rwlock.GetGoroutineID())
 	return err
 }
 
 func (r *rwRedis) acquirLock(ctx context.Context) error {
-	name := []string{r.name}
 	expiry := int(r.opts.Expiry / time.Millisecond)
-	result, err := acquireScript.Eval(ctx, r.client, name, r.opts.Value, expiry).Result()
+	result, err := acquireScript.Eval(ctx, r.client, []string{r.name}, r.opts.Value, expiry).Result()
 	if err != nil {
 		return err
 	}
 	if result == int64(1) {
 		atomic.StoreUint32(&r.sema, 1)
-		if r.opts.Touchf != nil {
-			go r.touchRenewal(ctx, r.name)
-		}
+		ctx, r.cancel = context.WithCancel(context.TODO())
+		go r.touchRenewal(&rwlock.Renewal{Ctx: ctx, Name: r.name, Cancel: r.cancel, Value: r.opts.Value})
 		return nil
 	} else if r.sema == 0 {
 		r.notify(rwlock.GetGoroutineID())
@@ -107,24 +111,19 @@ func (r *rwRedis) acquirLock(ctx context.Context) error {
 	return rwlock.ErrFail
 }
 
-// 过期前询问是否续签时间
-func (r *rwRedis) touchRenewal(ctx context.Context, name string) {
-	expiryDuration := r.opts.Expiry
-	ctx, r.cancel = context.WithCancel(ctx)
+// 过期前重新开始（有效期的）延长
+func (r *rwRedis) touchRenewal(touch *rwlock.Renewal) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-touch.Ctx.Done():
 			return
-		case <-time.After(expiryDuration - 500*time.Millisecond):
-			expiry := int(expiryDuration / time.Millisecond)
-			_, _ = touchScript.Run(ctx,
-				r.client, []string{name}, r.opts.Value, expiry).Result()
-			if expiryDuration = r.opts.Touchf(ctx, r.cancel); expiryDuration > 0 {
-				log.Printf("续期:  %v", r.name)
-				expiry := int(expiryDuration / time.Millisecond)
-				_, _ = touchScript.Run(ctx,
-					r.client, []string{name}, r.opts.Value, expiry).Result()
-			}
+		case <-time.After(r.opts.Expiry - 2000*time.Millisecond):
+			expiry := int(r.opts.Expiry / time.Millisecond)
+			result, err := touchWithSetNXScript.Eval(touch.Ctx,
+				r.client, []string{touch.Name}, r.opts.Value, expiry).Result()
+			touch.Err = err
+			touch.Result = result == int64(1)
+			r.opts.OnRenewal(touch)
 		}
 	}
 }

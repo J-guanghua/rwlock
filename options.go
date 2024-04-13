@@ -21,28 +21,31 @@ type RWMutex interface {
 	RUnlock(ctx context.Context) error
 }
 
-func GetGoroutineID() int64 {
-	b := make([]byte, 64)
-	b = b[:runtime.Stack(b, false)]
-	var id int64
-	fmt.Sscanf(string(b), "goroutine %d ", &id)
-	return id
+type Options struct {
+	Value     string
+	Expiry    time.Duration
+	OnRenewal func(r *Renewal)
 }
-
-type Touch struct {
+type Renewal struct {
 	Ctx    context.Context
 	Cancel context.CancelFunc
+	Name   string
+	Value  string
+	Result bool
 	Err    error
 }
 
-type Options struct {
-	Value  string
-	Expiry time.Duration
-	Touchf func(context.Context, context.CancelFunc) time.Duration
-}
+const optsKey = iota
 
 type Option func(options *Options)
 
+func WithContext(ctx context.Context, opts *Options) context.Context {
+	return context.WithValue(ctx, optsKey, opts)
+}
+func FromContext(ctx context.Context, opts *Options) (o *Options, ok bool) {
+	o, ok = ctx.Value(optsKey).(*Options)
+	return
+}
 func WithValue(v string) Option {
 	return func(ops *Options) {
 		ops.Value = v
@@ -53,8 +56,15 @@ func WithExpiry(expiry time.Duration) Option {
 		ops.Expiry = expiry
 	}
 }
-func WithTouchf(f func(context.Context, context.CancelFunc) time.Duration) Option {
+func WithTouchf(f func(touch *Renewal)) Option {
 	return func(ops *Options) {
-		ops.Touchf = f
+		ops.OnRenewal = f
 	}
+}
+func GetGoroutineID() int64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	var id int64
+	fmt.Sscanf(string(b), "goroutine %d ", &id)
+	return id
 }

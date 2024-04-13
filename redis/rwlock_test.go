@@ -14,7 +14,7 @@ import (
 func init() {
 
 	Init(&redis.Options{
-		Addr:         "127.0.0.1:6379",
+		Addr:         "192.168.43.152:6379",
 		PoolSize:     20,               // 连接池大小
 		MinIdleConns: 10,               // 最小空闲连接数
 		MaxConnAge:   time.Hour,        // 连接的最大生命周期
@@ -38,7 +38,7 @@ func Test_RWLock_WaitGroup(t *testing.T) {
 				wg2.Add(1)
 				go func(name string) {
 					defer wg2.Done()
-					mutex := NewLock(name)
+					mutex := Mutex(name)
 					if err := mutex.Lock(ctx); err != nil {
 						panic(err)
 					}
@@ -74,7 +74,7 @@ func (a *Account) alteration(ctx context.Context, value float64) error {
 
 func TestWaitGroupAccount(t *testing.T) {
 	var wg sync.WaitGroup
-	account := &Account{balance: 100002, m: NewLock("guanghua-2")}
+	account := &Account{balance: 100002, m: Mutex("guanghua-2")}
 	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
 	for i := 0; i < 100000; i++ {
 		wg.Add(1)
@@ -88,4 +88,30 @@ func TestWaitGroupAccount(t *testing.T) {
 	}
 	wg.Wait()
 	log.Printf("账户余额:%v,并发 100000,剩余 %v,", 100002, account.balance)
+}
+
+func TestLeaderElection(t *testing.T) {
+	StartElection(context.TODO())
+}
+
+func StartElection(ctx context.Context) {
+	LeaderElectionRunOrDie(ctx, "guanghua", rwlock.LeaderElectionConfig{
+		OnStoppedLeading: func(identityID string) {
+			log.Printf("我退出了,身份ID: %v", identityID)
+			StartElection(ctx)
+		},
+		OnNewLeader: func(identityID string) {
+			log.Printf("我当选了,身份ID: %v", identityID)
+		},
+		OnStartedLeading: func(ctx context.Context) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
+					log.Printf("我在的..................")
+				}
+			}
+		},
+	})
 }
