@@ -1,8 +1,8 @@
 # rwlock
-分布式缓存方案
+分布式锁,Leader Election
 
 
-# go-cache
+# rwlock
 
 ## Installation
 
@@ -15,7 +15,7 @@ To compile it from source:
     cd $GOPATH/src/github.com/J-guanghua/rwlock
     go get -u -v
     go build && go test -v
-### New cache interface
+### 
 ```go
     import (
         "github.com/J-guanghua/rwlock"
@@ -27,14 +27,12 @@ To compile it from source:
     // init file lock
 	// 压测 100万并发 左右
     Init("./tmp")
-
-	mutex := file.NewLock("test-1")
-    mutex := NewLock(name)
-    defer mutex.Unlock(ctx)
+    mutex := file.Mutex("test-1")
     if err := mutex.Lock(ctx); err != nil {
         panic(err)
     }
-
+    defer mutex.Unlock(ctx)
+	
     // init redis lock
 	// 支持高可用，压测 100万并发 左右
 	redis.Init(&redis.Options{
@@ -46,12 +44,11 @@ To compile it from source:
         IdleTimeout:  10 * time.Minute, // 连接的最大空闲时间
     })
     
-    mutex := redis.NewLock("test-1")
-    mutex := NewLock(name)
-    defer mutex.Unlock(ctx)
+    mutex := redis.Mutex("test-1")
     if err := mutex.Lock(ctx); err != nil {
         panic(err)
     }
+    defer mutex.Unlock(ctx)
 	
     // init db lock
 	// 支持高可用，并发压测 5000 左右
@@ -59,17 +56,66 @@ To compile it from source:
     if err != nil {
         panic(err)
     }
-
     database.Init(db)
-	mutex := database.NewLock("test-1")
-    mutex := NewLock(name)
-    defer mutex.Unlock(ctx)
+	mutex := database.Mutex("test-1")
     if err := mutex.Lock(ctx); err != nil {
         panic(err)
     }
+    defer mutex.Unlock(ctx)
         
 ```
-### reference
+// redis单机 ab 20万并发请求压测
+ab -n 200000 -c 1000 http://localhost:8000/redis
+![Image text](img.png)
+
+### Leader Election
 ```go
 
+func TestLeaderElection(t *testing.T) {
+    StartElection(context.TODO())
+}
+
+func StartElection(ctx context.Context) {
+	// redis 实现
+    redis.LeaderElectionRunOrDie(ctx, "redis-test", rwlock.LeaderElectionConfig{
+        OnStoppedLeading: func(identityID string) {
+            log.Printf("我退出了,身份ID: %v", identityID)
+            StartElection(ctx)
+        },
+        OnNewLeader: func(identityID string) {
+            log.Printf("我当选了,身份ID: %v", identityID)
+        },
+        OnStartedLeading: func(ctx context.Context) {
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case <-time.After(2 * time.Second):
+                    log.Printf("我在的..................")
+                }
+            }
+        },
+    })
+	
+    // 数据库 实现
+    database.LeaderElectionRunOrDie(ctx, "mysql-test", rwlock.LeaderElectionConfig{
+        OnStoppedLeading: func(identityID string) {
+            log.Printf("我退出了,身份ID: %v", identityID)
+        },
+        OnNewLeader: func(identityID string) {
+            log.Printf("我当选了,身份ID: %v", identityID)
+        },
+        OnStartedLeading: func(ctx context.Context) {
+            for {
+                select {
+                case <-ctx.Done():
+                    return
+                case <-time.After(2 * time.Second):
+                    log.Printf("我在的..................")
+                }
+            }
+        },
+    })
+
+}
 ```
