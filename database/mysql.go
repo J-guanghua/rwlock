@@ -24,7 +24,6 @@ type rwMysql struct {
 func (db *rwMysql) Lock(ctx context.Context) error {
 	var err error
 	if db.sema == 1 || db.wait > 0 {
-		log.Println("wait...",db.sema,db.wait)
 		db.notify(rwlock.GetGoroutineID())
 	} else if err = db.acquireLock(ctx); err == nil {
 		return nil

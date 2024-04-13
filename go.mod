@@ -3,9 +3,8 @@ module github.com/J-guanghua/rwlock
 go 1.17
 
 require (
-	github.com/J-guanghua/mutex v1.3.2
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/go-sql-driver/mysql v1.6.0
 	golang.org/x/sys v0.19.0
 )
 
