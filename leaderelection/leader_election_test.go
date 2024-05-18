@@ -20,7 +20,7 @@ func TestMysqlElectionRunOrDie(_ *testing.T) {
 	}
 	database.Init(db2)
 	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second) // nolint
-	MysqlElectionRunOrDie(ctx, "guanghua", LeaderElectionConfig{
+	MysqlRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {
 			log.Printf("我退出了,身份ID: %v", identityID)
 		},
@@ -50,7 +50,7 @@ func TestRedisElectionRunOrDie(_ *testing.T) {
 		IdleTimeout:  10 * time.Minute, // 连接的最大空闲时间
 	})
 	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second) // nolint
-	RedisElectionRunOrDie(ctx, "guanghua", LeaderElectionConfig{
+	RedisRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {
 			log.Printf("我退出了,身份ID: %v", identityID)
 			// 重新参与选举

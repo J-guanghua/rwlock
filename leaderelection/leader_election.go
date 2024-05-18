@@ -12,7 +12,7 @@ import (
 
 // Leadership election configuration
 type LeaderElectionConfig struct { // nolint
-	identityID       string
+	IdentityID       string
 	RetryPeriod      time.Duration
 	RenewDeadline    time.Duration
 	OnNewLeader      func(identityID string)
@@ -39,16 +39,16 @@ func (lec *LeaderElectionConfig) Init() {
 }
 
 func (lec *LeaderElectionConfig) GetIdentityID() string {
-	if lec.identityID == "" {
-		lec.identityID = uuid.NewString()
+	if lec.IdentityID == "" {
+		lec.IdentityID = uuid.NewString()
 	}
-	return lec.identityID
+	return lec.IdentityID
 }
 
 // 自定义方案
 // Mutex Lock 需要支持重入
 // Mutex 配置信息 选举IdentityID,续约时长 可以通过 FromContext 获取
-func LeaderElectionRunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
+func RunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx)
 LeaderElection:
@@ -74,7 +74,7 @@ LeaderElection:
 	}
 }
 
-func RedisElectionRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
+func RedisRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	ctx2, cancel := context.WithCancel(ctx)
 	mutex := redis.Mutex(name, rwlock.WithValue(configuration.GetIdentityID()),
 		rwlock.WithExpiry(configuration.RenewDeadline+2*time.Second),
@@ -102,7 +102,7 @@ LeaderElection:
 	_ = mutex.Unlock(ctx2)
 }
 
-func MysqlElectionRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
+func MysqlRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx) // nolint
 	mutex := database.Mutex(name)

@@ -58,7 +58,7 @@ func (r *rwRedis) getOptions(ctx context.Context) *rwlock.Options {
 }
 
 func (r *rwRedis) Lock(ctx context.Context) (err error) {
-	if r.sema == 1 || r.wait > 0 {
+	if r.sema > 0 || r.wait > 0 {
 		r.notify(rwlock.GetGoroutineID())
 	} else if err = r.acquireLock(ctx); err == nil {
 		return nil
@@ -98,7 +98,7 @@ func (r *rwRedis) acquireLock(ctx context.Context) error {
 		return err
 	}
 	if result == int64(1) {
-		atomic.StoreUint32(&r.sema, 1)
+		atomic.StoreUint32(&r.sema, uint32(rwlock.GetGoroutineID()))
 		ctx, r.cancel = context.WithCancel(context.TODO())
 		go r.touchRenewal(&rwlock.Renewal{Ctx: ctx, Name: r.name, Cancel: r.cancel})
 		return nil
