@@ -60,12 +60,20 @@ type rwRedis struct {
 	cancel context.CancelFunc
 }
 
+func (r *rwRedis) getOptions(ctx context.Context) *rwlock.Options {
+	opts, ok := rwlock.FromContext(ctx)
+	if ok {
+		return opts
+	}
+	return r.opts
+}
+
 func (r *rwRedis) Lock(ctx context.Context) (err error) {
 	if r.sema == 1 || r.wait > 0 {
 		r.notify(rwlock.GetGoroutineID())
-	} else if err = r.acquirLock(ctx); err == nil {
+	} else if err = r.acquireLock(ctx); err == nil {
 		return nil
-	} else if !errors.Is(err, rwlock.ErrFail) {
+	} else if !errors.Is(err, rwlock.ErrFailed) {
 		return err
 	}
 	atomic.AddInt32(&r.wait, 1)
@@ -74,8 +82,8 @@ LoopLock:
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-r.signal:
-		err = r.acquirLock(ctx)
-		if errors.Is(err, rwlock.ErrFail) {
+		err = r.acquireLock(ctx)
+		if errors.Is(err, rwlock.ErrFailed) {
 			goto LoopLock
 		} else if err != nil {
 			return err
@@ -93,34 +101,36 @@ func (r *rwRedis) Unlock(ctx context.Context) error {
 	return err
 }
 
-func (r *rwRedis) acquirLock(ctx context.Context) error {
-	expiry := int(r.opts.Expiry / time.Millisecond)
-	result, err := acquireScript.Eval(ctx, r.client, []string{r.name}, r.opts.Value, expiry).Result()
+func (r *rwRedis) acquireLock(ctx context.Context) error {
+	opts := r.getOptions(ctx)
+	expiry := int(opts.Expiry / time.Millisecond)
+	result, err := acquireScript.Eval(ctx, r.client, []string{r.name}, opts.Value, expiry).Result()
 	if err != nil {
 		return err
 	}
 	if result == int64(1) {
 		atomic.StoreUint32(&r.sema, 1)
 		ctx, r.cancel = context.WithCancel(context.TODO())
-		go r.touchRenewal(&rwlock.Renewal{Ctx: ctx, Name: r.name, Cancel: r.cancel, Value: r.opts.Value})
+		go r.touchRenewal(&rwlock.Renewal{Ctx: ctx, Name: r.name, Cancel: r.cancel})
 		return nil
 	} else if r.sema == 0 {
 		r.notify(rwlock.GetGoroutineID())
 	}
 	//log.Printf("重试: %v , %v", r.name, err)
-	return rwlock.ErrFail
+	return rwlock.ErrFailed
 }
 
 // 过期前重新开始（有效期的）延长
 func (r *rwRedis) touchRenewal(touch *rwlock.Renewal) {
+	opts := r.getOptions(touch.Ctx)
 	for {
 		select {
 		case <-touch.Ctx.Done():
 			return
-		case <-time.After(r.opts.Expiry - 2000*time.Millisecond):
-			expiry := int(r.opts.Expiry / time.Millisecond)
-			result, err := touchWithSetNXScript.Eval(touch.Ctx,
-				r.client, []string{touch.Name}, r.opts.Value, expiry).Result()
+		case <-time.After(opts.Expiry - 2000*time.Millisecond):
+			expiry := int(opts.Expiry / time.Millisecond)
+			result, err := touchScript.Eval(touch.Ctx,
+				r.client, []string{touch.Name}, opts.Value, expiry).Result()
 			touch.Err = err
 			touch.Result = result == int64(1)
 			r.opts.OnRenewal(touch)

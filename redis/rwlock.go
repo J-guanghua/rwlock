@@ -63,34 +63,3 @@ func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex {
 	return nil
 }
-
-func LeaderElectionRunOrDie(ctx context.Context, name string, config rwlock.LeaderElectionConfig) {
-	config.Init()
-	ctx2, cancel := context.WithCancel(ctx)
-	mutex := Mutex(name, rwlock.WithValue(config.GetIdentityID()),
-		rwlock.WithExpiry(config.RenewDeadline+2*time.Second),
-		rwlock.WithTouchf(func(touch *rwlock.Renewal) {
-			if touch.Err != nil || touch.Result == false {
-				defer cancel()
-				touch.Cancel()
-			}
-		}),
-	)
-
-LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond)
-	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(config.RetryPeriod)
-		goto LeaderElection
-	}
-
-	// 当选 Leader
-	defer cancel()
-	defer mutex.Unlock(ctx2)
-	defer config.OnStoppedLeading(config.GetIdentityID())
-	config.OnNewLeader(config.GetIdentityID())
-	go config.OnStartedLeading(ctx2)
-	select {
-	case <-ctx2.Done():
-	}
-}

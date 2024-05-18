@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var ErrFail = errors.New("fiand error")
+var ErrFailed = errors.New("Lock acquisition failure")
 
 type Mutex interface {
 	Lock(ctx context.Context) error
@@ -42,7 +42,7 @@ type Option func(options *Options)
 func WithContext(ctx context.Context, opts *Options) context.Context {
 	return context.WithValue(ctx, optsKey, opts)
 }
-func FromContext(ctx context.Context, opts *Options) (o *Options, ok bool) {
+func FromContext(ctx context.Context) (o *Options, ok bool) {
 	o, ok = ctx.Value(optsKey).(*Options)
 	return
 }

@@ -17,7 +17,7 @@ type rwFile struct {
 
 func (file *rwFile) Lock(ctx context.Context) (err error) {
 	err = file.acquireLock(ctx)
-	if !errors.Is(err, rwlock.ErrFail) {
+	if !errors.Is(err, rwlock.ErrFailed) {
 		return err
 	} else if err != nil {
 	LoopLock:
@@ -26,7 +26,7 @@ func (file *rwFile) Lock(ctx context.Context) (err error) {
 			return ctx.Err()
 		case <-time.After(1000 * time.Millisecond):
 			err := file.acquireLock(ctx)
-			if errors.Is(err, rwlock.ErrFail) {
+			if errors.Is(err, rwlock.ErrFailed) {
 				goto LoopLock
 			} else if err != nil {
 				return err

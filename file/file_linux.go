@@ -13,7 +13,7 @@ func acquireLock(file *os.File) error {
 	err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 	if err != nil {
 		fmt.Println("Failed to acquire lock:", err)
-		return rwlock.ErrFail
+		return rwlock.ErrFailed
 	}
 	return nil
 }
