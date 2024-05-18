@@ -52,6 +52,8 @@ func TestRedisElectionRunOrDie(t *testing.T) {
 	RedisElectionRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {
 			log.Printf("我退出了,身份ID: %v", identityID)
+			// 重新参与选举
+			// TestRedisElectionRunOrDie(t)
 		},
 		OnNewLeader: func(identityID string) {
 			log.Printf("我当选了,身份ID: %v", identityID)

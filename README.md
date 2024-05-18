@@ -80,9 +80,10 @@ func TestLeaderElection(t *testing.T) {
 
 func StartElection(ctx context.Context) {
 	// redis 实现
-    redis.LeaderElectionRunOrDie(ctx, "redis-test", rwlock.LeaderElectionConfig{
+	leaderelection.RedisElectionRunOrDie(ctx, "redis-test", rwlock.LeaderElectionConfig{
         OnStoppedLeading: func(identityID string) {
             log.Printf("我退出了,身份ID: %v", identityID)
+			// 重新参与选举
             StartElection(ctx)
         },
         OnNewLeader: func(identityID string) {
@@ -99,26 +100,26 @@ func StartElection(ctx context.Context) {
             }
         },
     })
-	
-    // 数据库 实现
-    database.LeaderElectionRunOrDie(ctx, "mysql-test", rwlock.LeaderElectionConfig{
-        OnStoppedLeading: func(identityID string) {
-            log.Printf("我退出了,身份ID: %v", identityID)
-        },
-        OnNewLeader: func(identityID string) {
-            log.Printf("我当选了,身份ID: %v", identityID)
-        },
-        OnStartedLeading: func(ctx context.Context) {
-            for {
-                select {
-                case <-ctx.Done():
-                    return
-                case <-time.After(2 * time.Second):
-                    log.Printf("我在的..................")
-                }
-            }
-        },
-    })
+}	
 
-}
+// 数据库 实现
+leaderelection.MysqlElectionRunOrDie(ctx, "mysql-test", rwlock.LeaderElectionConfig{
+    OnStoppedLeading: func(identityID string) {
+        log.Printf("我退出了,身份ID: %v", identityID)
+    },
+    OnNewLeader: func(identityID string) {
+        log.Printf("我当选了,身份ID: %v", identityID)
+    },
+    OnStartedLeading: func(ctx context.Context) {
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-time.After(2 * time.Second):
+                log.Printf("我在的..................")
+            }
+        }
+    },
+})
+
 ```
