@@ -104,13 +104,17 @@ LeaderElection:
 
 func MysqlElectionRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	configuration.Init()
-	ctx2, cancel := context.WithCancel(ctx)
+	ctx2, cancel := context.WithCancel(ctx) // nolint
 	mutex := database.Mutex(name)
 LeaderElection:
 	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(configuration.RetryPeriod)
-		goto LeaderElection
+		select {
+		case <-ctx2.Done():
+			return // nolint
+		case <-time.After(configuration.RetryPeriod):
+			goto LeaderElection
+		}
 	}
 
 	// 当选 Leader
@@ -121,10 +125,13 @@ LeaderElection:
 		case <-time.After(configuration.RenewDeadline):
 			if err := mutex.Lock(ctx2); err != nil {
 				cancel()
-				_ = mutex.Unlock(ctx2)
 				configuration.OnStoppedLeading(configuration.GetIdentityID())
 				return
 			}
+		case <-ctx2.Done():
+			configuration.OnStoppedLeading(configuration.GetIdentityID())
+			_ = mutex.Unlock(ctx2)
+			return
 		}
 	}
 }

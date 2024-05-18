@@ -6,7 +6,7 @@
 
 ## Installation
 
-To install go-cache, simply run:
+To install rwlock, simply run:
 
     go get github.com/J-guanghua/rwlock
 
