@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/J-guanghua/rwlock"
-	"sync"
 	"sync/atomic"
+
+	"github.com/J-guanghua/rwlock"
 )
 
 type rwMysql struct {
@@ -14,9 +14,7 @@ type rwMysql struct {
 	name   string
 	sema   uint32
 	wait   int32
-	mtx    sync.Mutex
 	ops    *rwlock.Options
-	cancel context.CancelFunc
 	signal chan struct{}
 }
 
@@ -32,6 +30,8 @@ func (db *rwMysql) Lock(ctx context.Context) error {
 	atomic.AddInt32(&db.wait, 1)
 LoopLock:
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-db.signal:
 		err = db.acquireLock(ctx)
 		if errors.Is(err, rwlock.ErrFailed) {
@@ -46,11 +46,8 @@ LoopLock:
 func (db *rwMysql) Unlock(ctx context.Context) error {
 	defer db.notify(rwlock.GetGoroutineID())
 	defer atomic.StoreUint32(&db.sema, 0)
-	atomic.AddInt32(&db.wait, -1)
-	if err := db.releaseUnlock(ctx); err != nil {
-		return err
-	}
-	return nil
+	_ = atomic.AddInt32(&db.wait, -1)
+	return db.releaseUnlock(ctx)
 }
 
 func (db *rwMysql) acquireLock(ctx context.Context) error {
@@ -96,7 +93,7 @@ func (db *rwMysql) releaseUnlock(ctx context.Context) error {
 	return row.Err()
 }
 
-func (db *rwMysql) notify(gid int64) {
+func (db *rwMysql) notify(_ int64) {
 	for i := 0; i <= len(db.signal); i++ {
 		select {
 		case db.signal <- struct{}{}:

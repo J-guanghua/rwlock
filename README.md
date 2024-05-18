@@ -80,7 +80,7 @@ func TestLeaderElection(t *testing.T) {
 
 func StartElection(ctx context.Context) {
 	// redis 实现
-	leaderelection.RedisElectionRunOrDie(ctx, "redis-test", rwlock.LeaderElectionConfig{
+	leaderelection.RedisElectionRunOrDie(ctx, "redis-test", leaderelection.LeaderElectionConfig{
         OnStoppedLeading: func(identityID string) {
             log.Printf("我退出了,身份ID: %v", identityID)
 			// 重新参与选举
@@ -103,7 +103,7 @@ func StartElection(ctx context.Context) {
 }	
 
 // 数据库 实现
-leaderelection.MysqlElectionRunOrDie(ctx, "mysql-test", rwlock.LeaderElectionConfig{
+leaderelection.MysqlElectionRunOrDie(ctx, "mysql-test", leaderelection.LeaderElectionConfig{
     OnStoppedLeading: func(identityID string) {
         log.Printf("我退出了,身份ID: %v", identityID)
     },

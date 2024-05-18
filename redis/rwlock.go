@@ -2,10 +2,11 @@ package redis
 
 import (
 	"context"
-	"github.com/J-guanghua/rwlock"
-	"github.com/go-redis/redis/v8"
 	"sync"
 	"time"
+
+	"github.com/J-guanghua/rwlock"
+	"github.com/go-redis/redis/v8"
 )
 
 var rlock *rwLock
@@ -17,17 +18,17 @@ type rwLock struct {
 }
 
 func Init(options ...*redis.Options) {
-	var clients []*redis.Client
+	pools := []*redis.Client{}
 	for _, o := range options {
 		client := redis.NewClient(o)
 		_, err := client.Ping(context.TODO()).Result()
 		if err != nil {
 			panic(err)
 		}
-		clients = append(clients, redis.NewClient(o))
+		pools = append(pools, redis.NewClient(o))
 	}
 	rlock = &rwLock{
-		pool:  clients,
+		pool:  pools,
 		mutex: make(map[string]*rwRedis, 100),
 	}
 }
@@ -42,7 +43,6 @@ func (rlock *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex 
 			opts:   opts,
 			client: rlock.pool[index],
 			signal: make(chan struct{}, 1),
-			//starving: make(chan struct{}, 3),
 		}
 	}
 	return rlock.mutex[name]
@@ -60,6 +60,6 @@ func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 	return rlock.allocation(name, opt)
 }
 
-func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex {
+func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex { // nolint
 	return nil
 }

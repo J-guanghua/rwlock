@@ -3,10 +3,11 @@ package file
 import (
 	"context"
 	"errors"
-	"github.com/J-guanghua/rwlock"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/J-guanghua/rwlock"
 )
 
 type rwFile struct {
@@ -41,15 +42,13 @@ func (file *rwFile) Unlock(ctx context.Context) error {
 }
 
 // 获取文件句柄
-func (file *rwFile) acquireLock(ctx context.Context) error {
+func (file *rwFile) acquireLock(_ context.Context) error {
 	file.m.Lock()
-	//defer rwFile.mtx.Unlock()
 	return acquireLock(file.file)
 }
 
 // 释放文件锁
-func (file *rwFile) releaseLock(ctx context.Context) error {
-	//rwFile.mtx.Lock()
+func (file *rwFile) releaseLock(_ context.Context) error {
 	defer file.m.Unlock()
 	return releaseLock(file.file)
 }

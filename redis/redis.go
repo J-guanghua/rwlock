@@ -3,11 +3,11 @@ package redis
 import (
 	"context"
 	"errors"
-	"github.com/J-guanghua/rwlock"
-	"github.com/go-redis/redis/v8"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/J-guanghua/rwlock"
+	"github.com/go-redis/redis/v8"
 )
 
 var (
@@ -37,25 +37,14 @@ var (
 			return 0
 		end
 	`)
-	touchWithSetNXScript = redis.NewScript(`
-		if redis.call("GET", KEYS[1]) == ARGV[1] then
-			return redis.call("PEXPIRE", KEYS[1], ARGV[2])
-		elseif redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2], "NX") then
-			return 1
-		else
-			return 0
-		end
-`)
 )
 
 type rwRedis struct {
 	name   string
 	sema   uint32
 	wait   int32
-	mtx    sync.Mutex
 	client *redis.Client
 	signal chan struct{}
-	//starving chan struct{}
 	opts   *rwlock.Options
 	cancel context.CancelFunc
 }
@@ -116,7 +105,6 @@ func (r *rwRedis) acquireLock(ctx context.Context) error {
 	} else if r.sema == 0 {
 		r.notify(rwlock.GetGoroutineID())
 	}
-	//log.Printf("重试: %v , %v", r.name, err)
 	return rwlock.ErrFailed
 }
 
@@ -138,7 +126,7 @@ func (r *rwRedis) touchRenewal(touch *rwlock.Renewal) {
 	}
 }
 
-func (r *rwRedis) notify(gid int64) {
+func (r *rwRedis) notify(_ int64) {
 	for i := 0; i <= len(r.signal); i++ {
 		select {
 		case r.signal <- struct{}{}:

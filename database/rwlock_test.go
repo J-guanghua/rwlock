@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/J-guanghua/rwlock"
-	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/J-guanghua/rwlock"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 func init() {
@@ -18,15 +19,14 @@ func init() {
 		panic(err)
 	}
 	Init(db2)
-
 }
 
-func Test_RWLock_WaitGroup(t *testing.T) {
+func Test_RWLock_WaitGroup(_ *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		name := fmt.Sprintf("group-%v", i)
-		ctx, _ := context.WithTimeout(context.Background(), 25*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 25*time.Second) // nolint
 		go func(ctx context.Context, name string, group *sync.WaitGroup) {
 			var num int
 			var wg2 sync.WaitGroup
@@ -63,16 +63,15 @@ func (a *Account) alteration(ctx context.Context, value float64) error {
 	if err := a.m.Lock(ctx); err != nil {
 		return err
 	}
-	defer a.m.Unlock(ctx)
 	a.balance -= value
 	a.withhold += value
-	return nil
+	return a.m.Unlock(ctx)
 }
 
-func TestWaitGroupAccount(t *testing.T) {
+func TestWaitGroupAccount(_ *testing.T) {
 	var wg sync.WaitGroup
 	account := &Account{balance: 10002, m: Mutex("guanghua")}
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second) // nolint
 	for i := 0; i < 10000; i++ {
 		wg.Add(1)
 		go func(acc *Account) {

@@ -2,8 +2,9 @@ package database
 
 import (
 	"database/sql"
-	"github.com/J-guanghua/rwlock"
 	"sync"
+
+	"github.com/J-guanghua/rwlock"
 )
 
 var dlock rwLock
@@ -50,6 +51,6 @@ func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 	return dlock.allocation(name, ops)
 }
 
-func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex {
+func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex { // nolint
 	return nil
 }

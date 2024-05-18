@@ -2,13 +2,14 @@ package file
 
 import (
 	"fmt"
-	"github.com/J-guanghua/rwlock"
+	"io/fs"
 	"os"
 	"sync"
+
+	"github.com/J-guanghua/rwlock"
 )
 
 type rwLock struct {
-	size      int
 	mtx       sync.Mutex
 	directory string
 	mutex     map[string]*rwFile
@@ -23,8 +24,7 @@ func Init(filePath string) {
 	flock.directory = filePath
 	_, err := os.Stat(flock.directory)
 	if os.IsNotExist(err) {
-		err = os.Mkdir(flock.directory, 0666)
-		if err != nil {
+		if err = os.Mkdir(flock.directory, fs.FileMode(0o666)); err != nil {
 			panic(err)
 		}
 	}
@@ -36,7 +36,7 @@ func (flock *rwLock) allocation(name string) rwlock.Mutex {
 	defer flock.mtx.Unlock()
 	if flock.mutex[name] == nil {
 		filepath := fmt.Sprintf("%s/%s.txt", flock.directory, name)
-		file, err := os.OpenFile(filepath, os.O_CREATE|os.O_RDWR, 0666)
+		file, err := os.OpenFile(filepath, os.O_CREATE|os.O_RDWR, fs.FileMode(0o666))
 		if err != nil {
 			panic(err)
 		}
@@ -50,9 +50,10 @@ func (flock *rwLock) allocation(name string) rwlock.Mutex {
 
 var flock rwLock
 
-func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
+func Mutex(name string, _ ...rwlock.Option) rwlock.Mutex {
 	return flock.allocation(name)
 }
-func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex {
+
+func RWMutex(_ string, _ ...rwlock.Option) rwlock.RWMutex { // onlit
 	return nil
 }

@@ -1,7 +1,10 @@
 package file
 
-import "os"
-import "golang.org/x/sys/windows"
+import (
+	"os"
+
+	"golang.org/x/sys/windows"
+)
 
 func acquireLock(file *os.File) error {
 	handle := file.Fd()

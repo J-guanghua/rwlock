@@ -2,15 +2,16 @@ package leaderelection
 
 import (
 	"context"
+	"time"
+
 	"github.com/J-guanghua/rwlock"
 	"github.com/J-guanghua/rwlock/database"
 	"github.com/J-guanghua/rwlock/redis"
 	"github.com/google/uuid"
-	"time"
 )
 
-// 领导人选举配置
-type LeaderElectionConfig struct {
+// Leadership election configuration
+type LeaderElectionConfig struct { // nolint
 	identityID       string
 	RetryPeriod      time.Duration
 	RenewDeadline    time.Duration
@@ -19,66 +20,66 @@ type LeaderElectionConfig struct {
 	OnStoppedLeading func(identityID string)
 }
 
-func (config *LeaderElectionConfig) Init() {
-	if config.RetryPeriod == 0 {
-		config.RetryPeriod = 5 * time.Second
+func (lec *LeaderElectionConfig) Init() {
+	if lec.RetryPeriod == 0 {
+		lec.RetryPeriod = 5 * time.Second
 	}
-	if config.RenewDeadline == 0 {
-		config.RenewDeadline = 15 * time.Second
+	if lec.RenewDeadline == 0 {
+		lec.RenewDeadline = 15 * time.Second
 	}
-	if config.OnNewLeader == nil {
-		config.OnNewLeader = func(identityID string) {}
+	if lec.OnNewLeader == nil {
+		lec.OnNewLeader = func(identityID string) {}
 	}
-	if config.OnStartedLeading == nil {
-		config.OnStartedLeading = func(ctx context.Context) {}
+	if lec.OnStartedLeading == nil {
+		lec.OnStartedLeading = func(ctx context.Context) {}
 	}
-	if config.OnStoppedLeading == nil {
-		config.OnStoppedLeading = func(identityID string) {}
+	if lec.OnStoppedLeading == nil {
+		lec.OnStoppedLeading = func(identityID string) {}
 	}
 }
 
-func (config *LeaderElectionConfig) GetIdentityID() string {
-	if config.identityID == "" {
-		config.identityID = uuid.NewString()
+func (lec *LeaderElectionConfig) GetIdentityID() string {
+	if lec.identityID == "" {
+		lec.identityID = uuid.NewString()
 	}
-	return config.identityID
+	return lec.identityID
 }
 
 // 自定义方案
 // Mutex Lock 需要支持重入
 // Mutex 配置信息 选举IdentityID,续约时长 可以通过 FromContext 获取
-func LeaderElectionRunOrDie(ctx context.Context, mutex rwlock.Mutex, config LeaderElectionConfig) {
-	config.Init()
+func LeaderElectionRunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
+	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx)
 LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond)
+	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(config.RetryPeriod)
+		<-time.After(configuration.RetryPeriod)
 		goto LeaderElection
 	}
 
 	// 当选 Leader
-	config.OnNewLeader(config.GetIdentityID())
-	go config.OnStartedLeading(ctx2)
-	for {
-		select {
-		case <-time.After(config.RenewDeadline):
+	configuration.OnNewLeader(configuration.GetIdentityID())
+	go configuration.OnStartedLeading(ctx2)
+	for { // nolint
+		select { // nolint
+		case <-time.After(configuration.RenewDeadline):
 			if err := mutex.Lock(ctx2); err != nil {
 				cancel()
-				mutex.Unlock(ctx2)
-				config.OnStoppedLeading(config.GetIdentityID())
+				_ = mutex.Unlock(ctx2)
+				configuration.OnStoppedLeading(configuration.GetIdentityID())
 				return
 			}
 		}
 	}
 }
 
-func RedisElectionRunOrDie(ctx context.Context, name string, config LeaderElectionConfig) {
+func RedisElectionRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	ctx2, cancel := context.WithCancel(ctx)
-	mutex := redis.Mutex(name, rwlock.WithValue(config.GetIdentityID()),
-		rwlock.WithExpiry(config.RenewDeadline+2*time.Second),
+	mutex := redis.Mutex(name, rwlock.WithValue(configuration.GetIdentityID()),
+		rwlock.WithExpiry(configuration.RenewDeadline+2*time.Second),
 		rwlock.WithTouchf(func(touch *rwlock.Renewal) {
-			if touch.Err != nil || touch.Result == false {
+			if touch.Err != nil || !touch.Result {
 				defer cancel()
 				touch.Cancel()
 			}
@@ -86,44 +87,42 @@ func RedisElectionRunOrDie(ctx context.Context, name string, config LeaderElecti
 	)
 
 LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond)
+	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(config.RetryPeriod)
+		<-time.After(configuration.RetryPeriod)
 		goto LeaderElection
 	}
 
 	// 当选 Leader
 	defer cancel()
-	defer mutex.Unlock(ctx2)
-	defer config.OnStoppedLeading(config.GetIdentityID())
-	config.OnNewLeader(config.GetIdentityID())
-	go config.OnStartedLeading(ctx2)
-	select {
-	case <-ctx2.Done():
-	}
+	defer configuration.OnStoppedLeading(configuration.GetIdentityID())
+	configuration.OnNewLeader(configuration.GetIdentityID())
+	go configuration.OnStartedLeading(ctx2)
+	<-ctx2.Done()
+	_ = mutex.Unlock(ctx2)
 }
 
-func MysqlElectionRunOrDie(ctx context.Context, name string, config LeaderElectionConfig) {
-	config.Init()
+func MysqlElectionRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
+	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx)
 	mutex := database.Mutex(name)
 LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond)
+	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(config.RetryPeriod)
+		<-time.After(configuration.RetryPeriod)
 		goto LeaderElection
 	}
 
 	// 当选 Leader
-	config.OnNewLeader(config.GetIdentityID())
-	go config.OnStartedLeading(ctx2)
-	for {
-		select {
-		case <-time.After(config.RenewDeadline):
+	configuration.OnNewLeader(configuration.GetIdentityID())
+	go configuration.OnStartedLeading(ctx2)
+	for { // nolint
+		select { // nolint
+		case <-time.After(configuration.RenewDeadline):
 			if err := mutex.Lock(ctx2); err != nil {
 				cancel()
-				mutex.Unlock(ctx2)
-				config.OnStoppedLeading(config.GetIdentityID())
+				_ = mutex.Unlock(ctx2)
+				configuration.OnStoppedLeading(configuration.GetIdentityID())
 				return
 			}
 		}
