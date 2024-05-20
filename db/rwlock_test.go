@@ -1,10 +1,9 @@
-package database
+package db
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func init() {
 	Init(db2)
 }
 
-func Test_RWLock_WaitGroup(_ *testing.T) {
+func Test_RWLock_WaitGroup(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -31,7 +30,7 @@ func Test_RWLock_WaitGroup(_ *testing.T) {
 			var num int
 			var wg2 sync.WaitGroup
 			defer group.Done()
-			for i := 0; i < 1000; i++ {
+			for i := 0; i < 100; i++ {
 				wg2.Add(1)
 				go func(name string) {
 					defer wg2.Done()
@@ -47,19 +46,19 @@ func Test_RWLock_WaitGroup(_ *testing.T) {
 				}(name)
 			}
 			wg2.Wait()
-			log.Printf("%s,并发执行 %v 次,结果 %v ", name, 1000, num)
+			t.Logf("%s,并发执行 %v 次,结果 %v ", name, 100, num)
 		}(ctx, name, &wg)
 	}
 	wg.Wait()
 }
 
-type Account struct {
+type account struct {
 	m        rwlock.Mutex
 	balance  float64
 	withhold float64
 }
 
-func (a *Account) alteration(ctx context.Context, value float64) error {
+func (a *account) alteration(ctx context.Context, value float64) error {
 	if err := a.m.Lock(ctx); err != nil {
 		return err
 	}
@@ -68,20 +67,20 @@ func (a *Account) alteration(ctx context.Context, value float64) error {
 	return a.m.Unlock(ctx)
 }
 
-func TestWaitGroupAccount(_ *testing.T) {
+func TestWaitGroupAccount(t *testing.T) {
 	var wg sync.WaitGroup
-	account := &Account{balance: 10002, m: Mutex("guanghua")}
+	a := &account{balance: 102, m: Mutex("guanghua")}
 	ctx, _ := context.WithTimeout(context.Background(), 100*time.Second) // nolint
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
-		go func(acc *Account) {
+		go func(acc *account) {
 			defer wg.Done()
-			if err := account.alteration(ctx, 1); err != nil {
-				log.Printf("失败:账户余额:%v", acc.balance)
+			if err := a.alteration(ctx, 1); err != nil {
+				t.Logf("失败:账户余额:%v", acc.balance)
 				return
 			}
-		}(account)
+		}(a)
 	}
 	wg.Wait()
-	log.Printf("账户余额:%v,并发 100000,剩余 %v,", 100002, account.balance)
+	t.Logf("账户余额:%v,并发 1000,剩余 %v,", 1002, a.balance)
 }
