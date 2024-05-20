@@ -21,7 +21,7 @@ To compile it from source:
         "github.com/J-guanghua/rwlock"
         "github.com/J-guanghua/rwlock/file"
         "github.com/J-guanghua/rwlock/redis"
-        "github.com/J-guanghua/rwlock/database"
+        "github.com/J-guanghua/rwlock/db"
     )
 
     // init file lock
@@ -52,12 +52,12 @@ To compile it from source:
 	
     // init db lock
 	// 支持高可用,多实例，单实例并发压测 100000 左右
-    db, err := sql.Open("mysql", "root:guanghua@tcp(192.168.43.152:3306)/sys?parseTime=true")
+    mysql, err := sql.Open("mysql", "root:guanghua@tcp(192.168.43.152:3306)/sys?parseTime=true")
     if err != nil {
         panic(err)
     }
-    database.Init(db)
-    mutex := database.Mutex("test-1")
+    db.Init(mysql)
+    mutex := db.Mutex("test-1")
     if err := mutex.Lock(ctx); err != nil {
         panic(err)
     }

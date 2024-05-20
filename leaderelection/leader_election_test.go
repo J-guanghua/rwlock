@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/J-guanghua/rwlock/database"
+	"github.com/J-guanghua/rwlock/db"
 	rwredis "github.com/J-guanghua/rwlock/redis"
 	"github.com/go-redis/redis/v8"
 	_ "github.com/go-sql-driver/mysql"
@@ -18,7 +18,7 @@ func TestMysqlElectionRunOrDie(_ *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	database.Init(db2)
+	db.Init(db2)
 	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second) // nolint
 	MysqlRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {

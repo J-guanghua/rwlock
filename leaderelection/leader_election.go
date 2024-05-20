@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/J-guanghua/rwlock"
-	"github.com/J-guanghua/rwlock/database"
+	"github.com/J-guanghua/rwlock/db"
 	"github.com/J-guanghua/rwlock/redis"
 	"github.com/google/uuid"
 )
@@ -50,12 +50,16 @@ func (lec *LeaderElectionConfig) GetIdentityID() string {
 // Mutex 配置信息 选举IdentityID,续约时长 可以通过 FromContext 获取
 func RunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
 	configuration.Init()
-	ctx2, cancel := context.WithCancel(ctx)
+	ctx2, cancel := context.WithCancel(ctx) // nolint
 LeaderElection:
 	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(configuration.RetryPeriod)
-		goto LeaderElection
+		select {
+		case <-ctx2.Done():
+			return // nolint
+		case <-time.After(configuration.RetryPeriod):
+			goto LeaderElection
+		}
 	}
 
 	// 当选 Leader
@@ -66,15 +70,19 @@ LeaderElection:
 		case <-time.After(configuration.RenewDeadline):
 			if err := mutex.Lock(ctx2); err != nil {
 				cancel()
-				_ = mutex.Unlock(ctx2)
 				configuration.OnStoppedLeading(configuration.GetIdentityID())
 				return
 			}
+		case <-ctx2.Done():
+			configuration.OnStoppedLeading(configuration.GetIdentityID())
+			_ = mutex.Unlock(ctx2)
+			return
 		}
 	}
 }
 
 func RedisRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
+	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx)
 	mutex := redis.Mutex(name, rwlock.WithValue(configuration.GetIdentityID()),
 		rwlock.WithExpiry(configuration.RenewDeadline+2*time.Second),
@@ -89,8 +97,12 @@ func RedisRunOrDie(ctx context.Context, name string, configuration LeaderElectio
 LeaderElection:
 	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
-		<-time.After(configuration.RetryPeriod)
-		goto LeaderElection
+		select {
+		case <-ctx2.Done():
+			return // nolint
+		case <-time.After(configuration.RetryPeriod):
+			goto LeaderElection
+		}
 	}
 
 	// 当选 Leader
@@ -105,7 +117,7 @@ LeaderElection:
 func MysqlRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx) // nolint
-	mutex := database.Mutex(name)
+	mutex := db.Mutex(name)
 LeaderElection:
 	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
 	if err := mutex.Lock(ctx3); err != nil {
