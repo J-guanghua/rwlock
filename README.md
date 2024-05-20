@@ -66,11 +66,11 @@ To compile it from source:
 ```
 // redis单机 ab 20万并发请求压测
 ab -n 200000 -c 1000 http://localhost:8000/redis
-![Image text](img.png)
+![Image text](redis_img.png)
 
 // mysql单实例 ab 8万并发请求压测
 ab -n 80000 -c 1000 http://localhost:8000/db
-![Image text](img_1.png)
+![Image text](mysql_img.png)
 ### Leader Election
 ```go
 
