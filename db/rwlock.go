@@ -28,19 +28,19 @@ type rwLock struct {
 	mutex map[string]rwlock.Mutex
 }
 
-func (dlock *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
-	dlock.m.Lock()
-	defer dlock.m.Unlock()
-	if dlock.mutex[name] == nil {
-		index := len(name) % dlock.size
-		dlock.mutex[name] = &rwMysql{
-			db:     dlock.dbs[index],
+func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
+	rw.m.Lock()
+	defer rw.m.Unlock()
+	if rw.mutex[name] == nil {
+		index := len(name) % rw.size
+		rw.mutex[name] = &rwMysql{
+			db:     rw.dbs[index],
 			name:   name,
-			ops:    opts,
+			opts:   opts,
 			signal: make(chan struct{}, 1),
 		}
 	}
-	return dlock.mutex[name]
+	return rw.mutex[name]
 }
 
 func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {

@@ -24,6 +24,7 @@ type RWMutex interface {
 type Options struct {
 	Value     string
 	Expiry    time.Duration
+	Tries     int
 	OnRenewal func(r *Renewal)
 }
 type Renewal struct {
@@ -60,9 +61,16 @@ func WithExpiry(expiry time.Duration) Option {
 	}
 }
 
-func WithTouchf(f func(touch *Renewal)) Option {
+func WithOnRenewal(f func(renewal *Renewal)) Option {
 	return func(ops *Options) {
 		ops.OnRenewal = f
+	}
+}
+
+// 尝试加锁次数, 默认一直尝试
+func WithTries(tries int) Option {
+	return func(ops *Options) {
+		ops.Tries = tries
 	}
 }
 

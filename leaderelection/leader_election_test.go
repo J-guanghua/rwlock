@@ -19,7 +19,7 @@ func TestMysqlElectionRunOrDie(_ *testing.T) {
 		panic(err)
 	}
 	db.Init(db2)
-	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second) // nolint
+	ctx, _ := context.WithTimeout(context.TODO(), 1000*time.Second) // nolint
 	MysqlRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {
 			log.Printf("我退出了,身份ID: %v", identityID)
@@ -49,7 +49,7 @@ func TestRedisElectionRunOrDie(_ *testing.T) {
 		PoolTimeout:  30 * time.Second, // 获取连接的超时时间
 		IdleTimeout:  10 * time.Minute, // 连接的最大空闲时间
 	})
-	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second) // nolint
+	ctx, _ := context.WithTimeout(context.TODO(), 1000*time.Second) // nolint
 	RedisRunOrDie(ctx, "guanghua", LeaderElectionConfig{
 		OnStoppedLeading: func(identityID string) {
 			log.Printf("我退出了,身份ID: %v", identityID)

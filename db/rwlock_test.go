@@ -84,3 +84,13 @@ func TestWaitGroupAccount(t *testing.T) {
 	wg.Wait()
 	t.Logf("账户余额:%v,并发 1000,剩余 %v,", 1002, a.balance)
 }
+
+func BenchmarkRWMutex(b *testing.B) {
+	mutex := Mutex("test")
+	for i := 0; i < b.N; i++ {
+		if err := mutex.Lock(context.TODO()); err != nil {
+			b.Error(err)
+		}
+		_ = mutex.Unlock(context.TODO())
+	}
+}

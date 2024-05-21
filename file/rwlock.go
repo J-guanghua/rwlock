@@ -31,11 +31,11 @@ func Init(filePath string) {
 	flock.mutex = make(map[string]*rwFile)
 }
 
-func (flock *rwLock) allocation(name string) rwlock.Mutex {
-	flock.mtx.Lock()
-	defer flock.mtx.Unlock()
-	if flock.mutex[name] == nil {
-		filepath := fmt.Sprintf("%s/%s.txt", flock.directory, name)
+func (rw *rwLock) allocation(name string) rwlock.Mutex {
+	rw.mtx.Lock()
+	defer rw.mtx.Unlock()
+	if rw.mutex[name] == nil {
+		filepath := fmt.Sprintf("%s/%s.txt", rw.directory, name)
 		file, err := os.OpenFile(filepath, os.O_CREATE|os.O_RDWR, fs.FileMode(0o666))
 		if err != nil {
 			panic(err)
@@ -45,7 +45,7 @@ func (flock *rwLock) allocation(name string) rwlock.Mutex {
 			file: file,
 		}
 	}
-	return flock.mutex[name]
+	return rw.mutex[name]
 }
 
 var flock rwLock

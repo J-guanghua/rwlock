@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 )
 
 var (
+	// Lua 脚本，用于设置锁续签时长
 	touchScript = redis.NewScript(`
 		if redis.call("GET", KEYS[1]) == ARGV[1] then
 			return redis.call("PEXPIRE", KEYS[1], ARGV[2])
@@ -50,29 +52,35 @@ type rwRedis struct {
 }
 
 func (r *rwRedis) getOptions(ctx context.Context) *rwlock.Options {
-	opts, ok := rwlock.FromContext(ctx)
-	if ok {
+	if opts, ok := rwlock.FromContext(ctx); ok {
 		return opts
 	}
 	return r.opts
 }
 
-func (r *rwRedis) Lock(ctx context.Context) (err error) {
+func (r *rwRedis) Lock(ctx context.Context) error {
+	var err error
+	options := r.getOptions(ctx)
 	if r.sema > 0 || r.wait > 0 {
 		r.notify(rwlock.GetGoroutineID())
-	} else if err = r.acquireLock(ctx); err == nil {
+	} else if err = r.acquireLock(ctx, options); err == nil {
 		return nil
 	} else if !errors.Is(err, rwlock.ErrFailed) {
 		return err
 	}
+	var tries int
 	atomic.AddInt32(&r.wait, 1)
 LoopLock:
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-r.signal:
-		err = r.acquireLock(ctx)
+		tries++
+		err = r.acquireLock(ctx, options)
 		if errors.Is(err, rwlock.ErrFailed) {
+			if options.Tries > 0 && tries >= options.Tries {
+				return fmt.Errorf("尝试 %d 次,获取锁失败", tries)
+			}
 			goto LoopLock
 		} else if err != nil {
 			return err
@@ -90,16 +98,16 @@ func (r *rwRedis) Unlock(ctx context.Context) error {
 	return err
 }
 
-func (r *rwRedis) acquireLock(ctx context.Context) error {
-	opts := r.getOptions(ctx)
+// 尝试获取锁，如果获取失败 通知到休眠协程
+func (r *rwRedis) acquireLock(ctx context.Context, opts *rwlock.Options) error {
 	expiry := int(opts.Expiry / time.Millisecond)
 	result, err := acquireScript.Eval(ctx, r.client, []string{r.name}, opts.Value, expiry).Result()
 	if err != nil {
 		return err
 	}
 	if result == int64(1) {
+		ctx, r.cancel = context.WithCancel(ctx)
 		atomic.StoreUint32(&r.sema, uint32(rwlock.GetGoroutineID()))
-		ctx, r.cancel = context.WithCancel(context.TODO())
 		go r.touchRenewal(&rwlock.Renewal{Ctx: ctx, Name: r.name, Cancel: r.cancel})
 		return nil
 	} else if r.sema == 0 {
@@ -108,20 +116,20 @@ func (r *rwRedis) acquireLock(ctx context.Context) error {
 	return rwlock.ErrFailed
 }
 
-// 过期前重新开始（有效期的）延长
-func (r *rwRedis) touchRenewal(touch *rwlock.Renewal) {
-	opts := r.getOptions(touch.Ctx)
+// 过期前 设置锁续签时长
+func (r *rwRedis) touchRenewal(renewal *rwlock.Renewal) {
+	opts := r.getOptions(renewal.Ctx)
 	for {
 		select {
-		case <-touch.Ctx.Done():
+		case <-renewal.Ctx.Done():
 			return
 		case <-time.After(opts.Expiry - 2000*time.Millisecond):
 			expiry := int(opts.Expiry / time.Millisecond)
-			result, err := touchScript.Eval(touch.Ctx,
-				r.client, []string{touch.Name}, opts.Value, expiry).Result()
-			touch.Err = err
-			touch.Result = result == int64(1)
-			r.opts.OnRenewal(touch)
+			result, err := touchScript.Eval(renewal.Ctx,
+				r.client, []string{renewal.Name}, opts.Value, expiry).Result()
+			renewal.Err = err
+			renewal.Result = result == int64(1)
+			r.opts.OnRenewal(renewal)
 		}
 	}
 }

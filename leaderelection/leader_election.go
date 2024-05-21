@@ -46,8 +46,8 @@ func (lec *LeaderElectionConfig) GetIdentityID() string {
 }
 
 // 自定义方案
-// Mutex Lock 需要支持重入
-// Mutex 配置信息 选举IdentityID,续约时长 可以通过 FromContext 获取
+// Mutex Lock 需要支持可重入
+// Mutex 配置信息 选举IdentityID
 func RunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx) // nolint
@@ -81,22 +81,23 @@ LeaderElection:
 	}
 }
 
+// redis实现选举机制
 func RedisRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx)
-	mutex := redis.Mutex(name, rwlock.WithValue(configuration.GetIdentityID()),
+	mutex := redis.Mutex(name, rwlock.WithTries(2),
+		rwlock.WithValue(configuration.GetIdentityID()),
 		rwlock.WithExpiry(configuration.RenewDeadline+2*time.Second),
-		rwlock.WithTouchf(func(touch *rwlock.Renewal) {
-			if touch.Err != nil || !touch.Result {
+		rwlock.WithOnRenewal(func(renewal *rwlock.Renewal) {
+			if renewal.Err != nil || !renewal.Result {
 				defer cancel()
-				touch.Cancel()
+				renewal.Cancel()
 			}
 		}),
 	)
 
 LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
-	if err := mutex.Lock(ctx3); err != nil {
+	if err := mutex.Lock(ctx2); err != nil {
 		select {
 		case <-ctx2.Done():
 			return // nolint
@@ -114,13 +115,14 @@ LeaderElection:
 	_ = mutex.Unlock(ctx2)
 }
 
+// mysql实现选举机制
 func MysqlRunOrDie(ctx context.Context, name string, configuration LeaderElectionConfig) {
 	configuration.Init()
-	ctx2, cancel := context.WithCancel(ctx) // nolint
-	mutex := db.Mutex(name)
+	ctx2, cancel := context.WithCancel(ctx)
+	defer cancel()
+	mutex := db.Mutex(name, rwlock.WithTries(2))
 LeaderElection:
-	ctx3, _ := context.WithTimeout(ctx, 200*time.Millisecond) // nolint
-	if err := mutex.Lock(ctx3); err != nil {
+	if err := mutex.Lock(ctx2); err != nil {
 		select {
 		case <-ctx2.Done():
 			return // nolint
@@ -136,7 +138,6 @@ LeaderElection:
 		select { // nolint
 		case <-time.After(configuration.RenewDeadline):
 			if err := mutex.Lock(ctx2); err != nil {
-				cancel()
 				configuration.OnStoppedLeading(configuration.GetIdentityID())
 				return
 			}

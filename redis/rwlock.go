@@ -33,19 +33,19 @@ func Init(options ...*redis.Options) {
 	}
 }
 
-func (rlock *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
-	rlock.mtx.Lock()
-	defer rlock.mtx.Unlock()
-	if rlock.mutex[name] == nil {
-		index := len(rlock.mutex) % len(rlock.pool)
-		rlock.mutex[name] = &rwRedis{
+func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
+	rw.mtx.Lock()
+	defer rw.mtx.Unlock()
+	if rw.mutex[name] == nil {
+		index := len(rw.mutex) % len(rw.pool)
+		rw.mutex[name] = &rwRedis{
 			name:   name,
 			opts:   opts,
-			client: rlock.pool[index],
+			client: rw.pool[index],
 			signal: make(chan struct{}, 1),
 		}
 	}
-	return rlock.mutex[name]
+	return rw.mutex[name]
 }
 
 func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
