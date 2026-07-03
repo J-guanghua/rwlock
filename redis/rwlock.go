@@ -37,7 +37,7 @@ func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
 	rw.mtx.Lock()
 	defer rw.mtx.Unlock()
 	if rw.mutex[name] == nil {
-		index := len(rw.mutex) % len(rw.pool)
+		index := len(name) % len(rw.pool)
 		rw.mutex[name] = &rwRedis{
 			name:   name,
 			opts:   opts,
