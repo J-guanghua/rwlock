@@ -57,7 +57,7 @@ func Test_RWLock_WaitGroup(_ *testing.T) {
 }
 
 type Account struct {
-	m        rwlock.Mutex
+	m        rwlock.Locker
 	balance  float64
 	withhold float64
 }

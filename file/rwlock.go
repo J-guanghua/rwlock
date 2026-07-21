@@ -31,7 +31,7 @@ func Init(filePath string) {
 	flock.mutex = make(map[string]*rwFile)
 }
 
-func (rw *rwLock) allocation(name string) rwlock.Mutex {
+func (rw *rwLock) allocation(name string) rwlock.Locker {
 	rw.mtx.Lock()
 	defer rw.mtx.Unlock()
 	if rw.mutex[name] == nil {
@@ -50,10 +50,10 @@ func (rw *rwLock) allocation(name string) rwlock.Mutex {
 
 var flock rwLock
 
-func Mutex(name string, _ ...rwlock.Option) rwlock.Mutex {
+func Mutex(name string, _ ...rwlock.Option) rwlock.Locker {
 	return flock.allocation(name)
 }
 
-func RWMutex(_ string, _ ...rwlock.Option) rwlock.RWMutex { // onlit
+func RWMutex(_ string, _ ...rwlock.Option) rwlock.RWLocker { // onlit
 	return nil
 }

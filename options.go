@@ -10,13 +10,13 @@ import (
 
 var ErrFailed = errors.New("Lock acquisition failure")
 
-type Mutex interface {
+type Locker interface {
 	Lock(ctx context.Context) error
 	Unlock(ctx context.Context) error
 }
 
-type RWMutex interface {
-	Mutex
+type RWLocker interface {
+	Locker
 	RLock(ctx context.Context) error
 	RUnlock(ctx context.Context) error
 }

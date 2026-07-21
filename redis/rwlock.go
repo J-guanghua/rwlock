@@ -33,7 +33,7 @@ func Init(options ...*redis.Options) {
 	}
 }
 
-func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
+func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Locker {
 	rw.mtx.Lock()
 	defer rw.mtx.Unlock()
 	if rw.mutex[name] == nil {
@@ -48,7 +48,7 @@ func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
 	return rw.mutex[name]
 }
 
-func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
+func Mutex(name string, opts ...rwlock.Option) rwlock.Locker {
 	opt := &rwlock.Options{
 		Expiry:    6 * time.Second,
 		Value:     "default",
@@ -60,6 +60,6 @@ func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 	return rlock.allocation(name, opt)
 }
 
-func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex { // nolint
+func RWMutex(name string, opts ...rwlock.Option) rwlock.RWLocker { // nolint
 	return nil
 }

@@ -18,17 +18,17 @@ func Init(dbs ...*sql.DB) {
 	}
 	dlock.size = len(dbs)
 	dlock.dbs = append(dlock.dbs, dbs...)
-	dlock.mutex = make(map[string]rwlock.Mutex, 100)
+	dlock.mutex = make(map[string]rwlock.Locker, 100)
 }
 
 type rwLock struct {
 	dbs   []*sql.DB
 	size  int
 	m     sync.Mutex
-	mutex map[string]rwlock.Mutex
+	mutex map[string]rwlock.Locker
 }
 
-func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
+func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Locker {
 	rw.m.Lock()
 	defer rw.m.Unlock()
 	if rw.mutex[name] == nil {
@@ -43,7 +43,7 @@ func (rw *rwLock) allocation(name string, opts *rwlock.Options) rwlock.Mutex {
 	return rw.mutex[name]
 }
 
-func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
+func Mutex(name string, opts ...rwlock.Option) rwlock.Locker {
 	ops := &rwlock.Options{}
 	for _, o := range opts {
 		o(ops)
@@ -51,6 +51,6 @@ func Mutex(name string, opts ...rwlock.Option) rwlock.Mutex {
 	return dlock.allocation(name, ops)
 }
 
-func RWMutex(name string, opts ...rwlock.Option) rwlock.RWMutex { // nolint
+func RWMutex(name string, opts ...rwlock.Option) rwlock.RWLocker { // nolint
 	return nil
 }

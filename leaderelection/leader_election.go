@@ -46,9 +46,9 @@ func (lec *LeaderElectionConfig) GetIdentityID() string {
 }
 
 // 自定义方案
-// Mutex Lock 需要支持可重入
-// Mutex 配置信息 选举IdentityID
-func RunOrDie(ctx context.Context, mutex rwlock.Mutex, configuration LeaderElectionConfig) { // nolint
+// Locker Lock 需要支持可重入
+// Locker 配置信息 选举IdentityID
+func RunOrDie(ctx context.Context, mutex rwlock.Locker, configuration LeaderElectionConfig) { // nolint
 	configuration.Init()
 	ctx2, cancel := context.WithCancel(ctx) // nolint
 LeaderElection:
